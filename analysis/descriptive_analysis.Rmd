@@ -1,0 +1,110 @@
+---
+title: "Descriptive Analysis"
+output: 
+  pdf_document:
+    toc: TRUE
+author: Marco Galliani
+---
+
+## Settings
+```{r}
+rm(list = ls())
+bomb_data <- read.csv("../data/geocoded_bomb_data.csv")
+
+bomb_data$Time <- as.POSIXct(bomb_data$Time)
+
+bomb_data$district <- as.factor(bomb_data$district)
+bomb_data$Type.of.bomb <- as.factor(bomb_data$Type.of.bomb)
+
+head(bomb_data)
+```
+
+## Descriptive analysis
+
+### Explosive event type 
+We got the following types of bombs
+- Explosive Bombs (EB)
+- Incendiary Bombs (IB)
+- Magnesium Flare
+- Crude Oil Bomb (COB)
+- Shrapnel
+- Unknown enemy action
+- Crashed aircraft
+
+Moreover we got 67 NAs
+```{r}
+summary(bomb_data$Type.of.bomb)
+```
+
+
+```{r}
+#Type of bomb
+barplot(table(bomb_data$Type.of.bomb), las=2)
+```
+
+### Evolution in time
+All types of bombs
+```{r}
+hist(bomb_data$Time, breaks = "hours", las=2)
+```
+
+
+By bomb type
+```{r}
+hist(bomb_data[bomb_data$Type.of.bomb == "IB",]$Time, breaks = "hours", las=2)
+hist(bomb_data[bomb_data$Type.of.bomb == "EB",]$Time, breaks = "hours", las=2)
+hist(bomb_data[bomb_data$Type.of.bomb == "EB.and.IB",]$Time, breaks = "hours", las=2)
+hist(bomb_data[bomb_data$Type.of.bomb == "COB",]$Time, breaks = "hours", las=2)
+```
+
+### Maps
+
+References
+- https://www.paulamoraga.com/tutorial-terra/#2_Vector_data
+- https://data.london.gov.uk/dataset/statistical-gis-boundary-files-london
+- https://conservancy.umn.edu/bitstream/handle/11299/220339/time-maps-tutorial-v2.html?sequence=3&isAllowed=y
+- https://rspatial.org/spatial/6-crs.html
+
+```{r warning=TRUE}
+library(terra)
+library(ggplot2)
+library(tidyterra)
+
+london_spat_vect <- vect("../data/London-data/London_Borough_Excluding_MHW.shp")
+london_spat_vect
+
+newcrs <- "+proj=longlat +datum=WGS84"
+london_spat_vect <- terra::project(london_spat_vect, newcrs)
+
+london_map <- ggplot(data = london_spat_vect) +
+  geom_spatvector() +
+  geom_sf(fill = "white")
+
+# adding data points
+explosion_sites <- london_map + 
+  geom_point(data = bomb_data[-c(367,459,745,395, 750,749),], 
+             aes(x = lon, y = lat, label = X, group = Time, col = Type.of.bomb)) +
+  scale_colour_brewer(palette = "Paired")
+explosion_sites
+
+
+greenwich <- london_map + 
+  geom_sf(fill = ifelse(london_map$data$NAME == "Greenwich", 'red', "white"))
+
+greenwich + geom_point(data = bomb_data[-c(367,459,745,395, 750,749),], 
+             aes(x = lon, y = lat, label = X, group = Time, col = district == "Greenwich" )) 
+```
+
+```{r eval=FALSE, warning=FALSE, include=FALSE}
+library(gganimate)
+
+explosion_sites_in_time <- explosion_sites +
+  transition_time(Time) + 
+  shadow_mark() +
+  ggtitle('Hour: {frame_time}',
+          subtitle = 'Frame {frame} of {nframes}')
+
+num_hours <- max(bomb_data$Time) - min(bomb_data$Time)
+animate(explosion_sites_in_time, nframes = round(num_hours*15))
+```
+
